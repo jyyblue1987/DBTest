@@ -405,6 +405,8 @@ int sem_create_table(token_list *t_list)
 	int cur_id = 0;
 	cd_entry	col_entry[MAX_NUM_COL];
 
+	int record_size = 0;
+
 
 	memset(&tab_entry, '\0', sizeof(tpd_entry));
 	cur = t_list;
@@ -518,13 +520,15 @@ int sem_create_table(token_list *t_list)
 												cur->tok_value = INVALID;
 											}
 											else
-		                  {
+											{
 												if (cur->tok_value == S_RIGHT_PAREN)
 												{
  													column_done = true;
 												}
 												cur = cur->next;
 											}
+
+											record_size += sizeof(int) + 1;											
 										}
 									}
 								}   // end of T_INT processing
@@ -598,6 +602,7 @@ int sem_create_table(token_list *t_list)
 																column_done = true;
 															}
 															cur = cur->next;
+															record_size += col_entry[cur_id].col_len + 1;
 														}
 													}
 												}
@@ -627,9 +632,8 @@ int sem_create_table(token_list *t_list)
 				{
 					/* Now finished building tpd and add it to the tpd list */
 					tab_entry.num_columns = cur_id;
-					tab_entry.tpd_size = sizeof(tpd_entry) + 
-															 sizeof(cd_entry) *	tab_entry.num_columns;
-				  tab_entry.cd_offset = sizeof(tpd_entry);
+					tab_entry.tpd_size = sizeof(tpd_entry) + sizeof(cd_entry) *	tab_entry.num_columns;
+					tab_entry.cd_offset = sizeof(tpd_entry);
 					new_entry = (tpd_entry*)calloc(1, tab_entry.tpd_size);
 
 					if (new_entry == NULL)
@@ -649,6 +653,14 @@ int sem_create_table(token_list *t_list)
 						rc = add_tpd_to_list(new_entry);
 
 						free(new_entry);
+
+						char table_name[MAX_IDENT_LEN + 4];
+						strcpy(table_name, tab_entry.table_name);
+						strcat(table_name, ".tab");
+						FILE *fp = fopen(table_name, "wb");
+						int record_size = 0;
+						fwrite(&record_size, sizeof(int), 1, fp);
+						fclose(fp);
 					}
 				}
 			}
