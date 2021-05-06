@@ -1572,11 +1572,11 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 			if (comparator == S_LESS && ret < 0)
 				flag[where_count] = true;
 		}
-		else if (cur->tok_value == K_NULL)
+		else if (val_cur->tok_value == K_NULL)
 		{
 			char *val = buffer + pos;
 
-			if (comparator == K_IS && strcmp(val, "") == 0)
+			if (comparator == K_IS && is_null(val, len) )
 				flag[where_count] = true;
 		}
 
