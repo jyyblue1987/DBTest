@@ -202,4 +202,5 @@ int get_data_len(tpd_entry *tab_entry, cd_entry* columns, char *name);
 int get_column_index(tpd_entry *tab_entry, cd_entry* columns, char *name);
 void print_name_records(tpd_entry *tab_entry, cd_entry* columns, token_list *cur, bool projection);
 token_list* get_where_for_select(token_list *cur, int &rc);
+bool is_null(char *buf, int len);
 

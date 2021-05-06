@@ -1261,6 +1261,7 @@ int sem_insert(token_list *t_list)
 						}
 						else
 						{
+							memset(buffer, 1, column_len - 1);
 							fwrite(buffer, column_len, 1, fp);
 
 							cur = cur->next;
@@ -1482,7 +1483,7 @@ int sem_update(token_list *tok)
 						}
 						else if (cur->tok_value == K_NULL)
 						{
-							
+							memset(row + pos, 1, len - 1);
 						}
 
 						col_cur = col_cur->next;//skip to next statement
@@ -1734,7 +1735,11 @@ int sem_select(token_list *tok)
 						int col_index = get_column_index(tab_entry, columns, col_names->tok_string);
 						int col_type = columns[col_index].col_type;
 
-						if (col_type == T_INT)
+						if (is_null(row + pos, len))
+						{
+							printf("|% 16s", "NULL");
+						}
+						else if (col_type == T_INT)
 						{
 							int val = 0;
 							memcpy(&val, row + pos, sizeof(int));
@@ -1759,7 +1764,11 @@ int sem_select(token_list *tok)
 					int col_type = columns[i].col_type;
 					int len = columns[i].col_len + 1;
 
-					if (col_type == T_INT)
+					if (is_null(row + pos, len))
+					{
+						printf("|% 16s", "NULL");
+					}
+					else if (col_type == T_INT)
 					{
 						int val = 0;
 						memcpy(&val, row + pos, sizeof(int));
@@ -1787,6 +1796,16 @@ int sem_select(token_list *tok)
 
 	return rc;
 
+}
+
+bool is_null(char *buf, int len)
+{
+	char *temp = (char *)malloc(len * sizeof(char));
+	memset(temp, 1, len);
+	int ret = memcmp(buf, temp, len - 1);
+	free(temp);
+
+	return ret == 0;
 }
 
 void print_split_line(int num_cols)
