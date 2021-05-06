@@ -1735,9 +1735,7 @@ int sem_select(token_list *tok)
 					int col_type = columns[i].col_type;
 					int len = columns[i].col_len + 1;
 
-					pos += (columns[i].col_len + 1);
-
-					if (col_type == INT_LITERAL)
+					if (col_type == T_INT)
 					{
 						int val = 0;
 						memcpy(&val, row + pos, sizeof(int));
@@ -1751,6 +1749,8 @@ int sem_select(token_list *tok)
 					{
 						printf("|% 16s", "NULL");
 					}
+
+					pos += (columns[i].col_len + 1);
 				}
 			}
 
