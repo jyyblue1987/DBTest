@@ -190,9 +190,14 @@ tpd_entry* get_tpd_from_list(char *tabname);
 
 int sem_insert(token_list *t_list);
 int sem_update(token_list *t_list);
+int sem_select(token_list *t_list);
+
+token_list* get_where_for_update(token_list *cur, int &rc);
 cd_entry* get_columns(tpd_entry* tab_entry);
 int get_record_size(cd_entry *columns, int count);
 bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t_list *where);
 int get_data_pos(tpd_entry *tab_entry, cd_entry* columns, char *name);
 int get_data_len(tpd_entry *tab_entry, cd_entry* columns, char *name);
+void print_name_records(tpd_entry *tab_entry, cd_entry* columns, token_list *cur, bool projection);
+token_list* get_where_for_select(token_list *cur, int &rc);
 

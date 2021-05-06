@@ -393,6 +393,10 @@ int do_semantic(token_list *tok_list)
 				rc = sem_update(cur);
 				break;
 
+			case SELECT:
+				rc = sem_select(cur);
+				break;
+
 			default:
 					; /* no action */
 		}
@@ -1323,6 +1327,39 @@ int get_record_size(cd_entry *columns, int count)
 	return size;
 }
 
+token_list* get_where_for_update(token_list *cur, int &rc) 
+{
+	t_list * where_cur = NULL;
+	t_list* counter = cur;
+	bool where = false;
+	while ((counter->tok_value != EOC && counter->tok_value != K_WHERE) && !rc && cur != NULL)
+	{
+		counter = counter->next;
+		if (counter->tok_value != S_EQUAL)
+		{
+			rc = INVALID_STATEMENT;
+			printf("ERROR: expected '=', got %s", counter->next->tok_string);
+			counter->next->tok_value = INVALID;
+		}
+		counter = counter->next;
+		if (counter->tok_value != STRING_LITERAL && counter->tok_value != INT_LITERAL && counter->tok_value != K_NULL)
+		{
+			rc = INVALID_STATEMENT;
+			printf("ERROR: expected string literal, int literal, or null keyword, got %s\n", counter->tok_string);
+		}
+		counter = counter->next;
+	}
+
+
+	if (counter->tok_value == K_WHERE)
+		where_cur = counter->next;
+	
+
+	return where_cur;
+}
+
+
+
 int sem_update(token_list *tok)
 {
 	token_list *cur = tok;
@@ -1360,38 +1397,14 @@ int sem_update(token_list *tok)
 			}
 			else
 			{
-				t_list* counter = cur;
-				bool where = false;
-				int num_columns = 0;
-				while ((counter->tok_value != EOC && counter->tok_value != K_WHERE) && !rc && cur != NULL)
-				{
-					num_columns++;
-					counter = counter->next;
-					if (counter->tok_value != S_EQUAL)
-					{
-						rc = INVALID_STATEMENT;
-						printf("ERROR: expected '=', got %s", counter->next->tok_string);
-						counter->next->tok_value = INVALID;
-					}
-					counter = counter->next;
-					if (counter->tok_value != STRING_LITERAL && counter->tok_value != INT_LITERAL && counter->tok_value != K_NULL)
-					{
-						rc = INVALID_STATEMENT;
-						printf("ERROR: expected string literal, int literal, or null keyword, got %s\n", counter->tok_string);
-					}
-					counter = counter->next;
-				}
-
-				t_list * where_cur = NULL;
-
-				if (counter->tok_value == K_WHERE)
-				{
-					where = true;
-					where_cur = counter->next;
-				}
-
-				//free(counter);
 				
+				token_list *where_cur = get_where_for_update(cur, rc);
+
+				if (rc == INVALID_STATEMENT)
+				{
+					cur->tok_value = INVALID;
+					return 0;
+				}
 
 				cd_entry* columns = get_columns(tab_entry);
 				int record_size = get_record_size(columns, tab_entry->num_columns);
@@ -1413,17 +1426,14 @@ int sem_update(token_list *tok)
 				char *buffer = (char*)malloc(record_size * record_count * sizeof(char));
 				fread(buffer, record_size, record_count, fp);
 
-				int offset = sizeof(int);
 				for (int i = 0; i < record_count; i++)
 				{
 					// check if current record can be updated
 					char *row = buffer + record_size * i;
 					if (is_where_satisfied(row, tab_entry, columns, where_cur) == false)
-					{
-						offset += record_size;
+					
 						continue;
-					}
-
+					
 					t_list* col_cur = cur;
 					t_list *val_cur = NULL;
 
@@ -1481,27 +1491,11 @@ int sem_update(token_list *tok)
 				fwrite(buffer, record_size, record_count, fp);
 
 				fclose(fp);
-
-				//								  //free(col_cur);
-				//if (where)
-				//{
-				//	t_list *where_cur = cur;
-				//	while ((where_cur = where_cur->next)->tok_value != K_WHERE);
-				//	rc = update_records(cur, val_cur, where_cur, columns, tab_entry->num_columns, update_columns, num_columns, records, header->num_records, &num_updated);
-				//}
-				//else
-				//{
-				//	rc = update_records(cur, val_cur, NULL, columns, tab_entry->num_columns, update_columns, num_columns, records, header->num_records, &num_updated);
-				//}
-
-				//if (!write_table_to_file(tab_entry, columns, header, records))
-				//{
-				//	printf("ERROR: unable to write records to table file\n");
-				//	rc = FILE_OPEN_ERROR;
-				//}
+				free(buffer);
 			}
 		}
 	}
+
 	return rc;
 }
 
@@ -1605,3 +1599,175 @@ int get_data_len(tpd_entry *tab_entry, cd_entry* columns, char *name)
 	return -1;
 }
 
+int sem_select(token_list *tok)
+{
+	int rc = 0;
+	int p_record_size = 0;
+	tpd_entry *tab_entry = NULL;
+	token_list *cur = tok;
+	bool projection;
+	int num_pcols = 0;
+	cd_entry* p_columns = NULL;
+	token_list* column_names = NULL;
+	FILE* fp1;
+	//FILE* fp2; 
+
+	if (cur->tok_value != S_STAR)
+	{
+		int count = 0;
+		projection = true;
+		column_names = cur;
+	}
+	else
+	{
+		projection = false;
+	}
+
+	token_list *temp = cur;
+	while (temp->tok_value != K_FROM && temp->tok_value != EOC )
+	{		
+		temp = temp->next;
+	}
+
+	token_list *from_cur = NULL;
+	if(temp->tok_value == EOC )
+	{
+		rc = INVALID_COLUMN_NAME;
+		cur->tok_value = INVALID;
+		printf("INVALID STATEMENT: %s\n", cur->tok_string);
+		return rc;
+	}
+
+	token_list* table_cur = temp->next;
+	
+	if ((tab_entry = get_tpd_from_list(table_cur->tok_string)) == NULL)
+	{
+		rc = TABLE_NOT_EXIST;
+		table_cur->tok_value = TABLE_NOT_EXIST;
+		return rc;
+	}
+	else
+	{
+		//loads file header
+		cd_entry* columns = get_columns(tab_entry);
+		token_list *where_cur = get_where_for_select(table_cur, rc);
+			
+		int record_size = get_record_size(columns, tab_entry->num_columns);
+
+		FILE* fp;
+		char *filename = (char*)malloc(sizeof(tab_entry->table_name) + 4);
+
+		strcpy(filename, tab_entry->table_name);
+		strcat(filename, ".tab");
+		if ((fp = fopen(filename, "r+")) == NULL)
+		{
+			printf("ERROR: unable to read table from file\n");
+			return FILE_OPEN_ERROR;
+		}
+
+		int record_count = 0;
+		fread(&record_count, sizeof(int), 1, fp);
+
+		char *buffer = (char*)malloc(record_size * record_count * sizeof(char));
+		fread(buffer, record_size, record_count, fp);
+
+		fclose(fp);
+
+		print_name_records(tab_entry, columns, cur, projection);
+
+		for (int i = 0; i < record_count; i++)
+		{
+			// check if current record can be updated
+			char *row = buffer + record_size * i;
+			if (is_where_satisfied(row, tab_entry, columns, where_cur) == false)
+				continue;
+
+			t_list* col_cur = cur;
+			t_list *val_cur = NULL;
+		}
+		free(buffer);
+	}
+
+	
+
+	return rc;
+
+}
+
+void print_split_line(int num_cols)
+{
+	for (int i = 0; i < num_cols - 1; i++)
+	{
+		printf("+----------------");
+	}
+
+	printf("+----------------+\n");
+}
+
+void print_name_records(tpd_entry *tab_entry, cd_entry* columns, token_list *cur, bool projection)
+{
+	//print header
+	int num_cols = 0;
+	if (projection == false)
+	{
+		num_cols = tab_entry->num_columns;
+
+		print_split_line(num_cols);		
+
+		for (int i = 0; i < num_cols; i++)
+		{
+			printf("|% 16s", columns[i].col_name);
+		}
+		printf("|\n");
+
+	}
+	else
+	{
+		token_list* col_names = cur;
+
+		while (col_names->tok_value != K_FROM) {		
+			if( col_names->tok_value == IDENT )
+				num_cols++;
+			col_names = col_names->next;			
+		}
+
+		print_split_line(num_cols);
+
+		col_names = cur;
+
+		while (col_names->tok_value != K_FROM) {
+			if (col_names->tok_value == IDENT)
+				printf("|% 16s", col_names->tok_string);
+			col_names = col_names->next;
+		}
+		printf("|\n");
+
+	}
+	
+	print_split_line(num_cols);
+}
+
+
+
+token_list* get_where_for_select(token_list *cur, int &rc)
+{
+	t_list * where_cur = NULL;
+	t_list* counter = cur;
+	bool where = false;
+	while ((counter->tok_value != EOC && counter->tok_value != K_WHERE) && !rc && cur != NULL)
+	{
+		if (counter->tok_value != IDENT && counter->tok_value != S_STAR )
+		{
+			rc = INVALID_STATEMENT;
+			printf("ERROR: expected identifier, got %s", counter->tok_string);
+			counter->tok_value = INVALID;
+		}		
+		counter = counter->next;		
+	}
+
+
+	if (counter->tok_value == K_WHERE)
+		where_cur = counter->next;
+
+	return where_cur;
+}
