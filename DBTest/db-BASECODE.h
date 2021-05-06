@@ -198,6 +198,7 @@ int get_record_size(cd_entry *columns, int count);
 bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t_list *where);
 int get_data_pos(tpd_entry *tab_entry, cd_entry* columns, char *name);
 int get_data_len(tpd_entry *tab_entry, cd_entry* columns, char *name);
+int get_column_index(tpd_entry *tab_entry, cd_entry* columns, char *name);
 void print_name_records(tpd_entry *tab_entry, cd_entry* columns, token_list *cur, bool projection);
 token_list* get_where_for_select(token_list *cur, int &rc);
 

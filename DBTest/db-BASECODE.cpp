@@ -223,7 +223,7 @@ int get_token(char* command, token_list** tok_list)
     else if (*cur == '\'')
     {
       /* Find STRING_LITERRAL */
-			int t_class;
+			
       cur++;
 			do 
 			{
@@ -1208,7 +1208,7 @@ int sem_insert(token_list *t_list)
 					}
 					else if (cur->tok_value == STRING_LITERAL)
 					{
-						if (strlen(cur->tok_string) == 0 || strlen(cur->tok_string) > column_len - 1)
+						if (strlen(cur->tok_string) == 0 || strlen(cur->tok_string) > (column_len - 1))
 						{
 							rc = INVALID_COLUMN_LENGTH;
 							cur->tok_value = INVALID_STATEMENT;
@@ -1367,7 +1367,6 @@ int sem_update(token_list *tok)
 	tpd_entry *tab_entry = NULL;
 	
 	cd_entry* columns = NULL;
-	char** records;
 	int num_updated = 0;
 
 	if ((tab_entry = get_tpd_from_list(cur->tok_string)) == NULL)
@@ -1430,8 +1429,7 @@ int sem_update(token_list *tok)
 				{
 					// check if current record can be updated
 					char *row = buffer + record_size * i;
-					if (is_where_satisfied(row, tab_entry, columns, where_cur) == false)
-					
+					if (is_where_satisfied(row, tab_entry, columns, where_cur) == false)					
 						continue;
 					
 					t_list* col_cur = cur;
@@ -1579,10 +1577,12 @@ int get_data_pos(tpd_entry *tab_entry, cd_entry* columns, char *name)
 	for (int i = 0; i < tab_entry->num_columns; i++)
 	{
 		if (strcasecmp(columns[i].col_name, name) == 0)
+		{
+			find = true;
 			break;
+		}
 
-		pos += (columns[i].col_len + 1);
-		find = true;
+		pos += (columns[i].col_len + 1);		
 	}
 
 	return find ? pos : -1;	
@@ -1599,6 +1599,16 @@ int get_data_len(tpd_entry *tab_entry, cd_entry* columns, char *name)
 	return -1;
 }
 
+int get_column_index(tpd_entry *tab_entry, cd_entry* columns, char *name)
+{
+	for (int i = 0; i < tab_entry->num_columns; i++)
+	{
+		if (strcasecmp(columns[i].col_name, name) == 0)
+			return i;
+	}
+
+	return -1;
+}
 int sem_select(token_list *tok)
 {
 	int rc = 0;
@@ -1609,9 +1619,7 @@ int sem_select(token_list *tok)
 	int num_pcols = 0;
 	cd_entry* p_columns = NULL;
 	token_list* column_names = NULL;
-	FILE* fp1;
-	//FILE* fp2; 
-
+	
 	if (cur->tok_value != S_STAR)
 	{
 		int count = 0;
@@ -1682,8 +1690,71 @@ int sem_select(token_list *tok)
 			if (is_where_satisfied(row, tab_entry, columns, where_cur) == false)
 				continue;
 
-			t_list* col_cur = cur;
-			t_list *val_cur = NULL;
+			if (projection == true)
+			{
+				token_list* col_names = cur;
+
+				while (col_names->tok_value != K_FROM) {
+					if (col_names->tok_value == IDENT)
+					{
+						int pos = get_data_pos(tab_entry, columns, col_names->tok_string);
+						if (pos < 0)
+						{
+							rc = INVALID_COLUMN_NAME;
+							col_names->tok_value = INVALID;
+							return rc;
+						}
+
+						int len = get_data_len(tab_entry, columns, col_names->tok_string);
+
+						int col_index = get_column_index(tab_entry, columns, col_names->tok_string);
+						int col_type = columns[col_index].col_type;
+
+						if (col_type == T_INT)
+						{
+							int val = 0;
+							memcpy(&val, row + pos, sizeof(int));
+							printf("|% 16d", val);
+						}
+						else if (col_type == T_CHAR || col_type == T_VARCHAR)
+						{
+							printf("|% 16s", row + pos);
+						}
+						else if (col_type == K_NULL)
+						{
+							printf("|% 16s", "NULL");
+						}
+					}
+					col_names = col_names->next;
+				}
+			}
+			else {
+				int pos = 0;
+				for (int i = 0; i < tab_entry->num_columns; i++)
+				{
+					int col_type = columns[i].col_type;
+					int len = columns[i].col_len + 1;
+
+					pos += (columns[i].col_len + 1);
+
+					if (col_type == INT_LITERAL)
+					{
+						int val = 0;
+						memcpy(&val, row + pos, sizeof(int));
+						printf("|% 16d", val);
+					}
+					else if (col_type == T_CHAR || col_type == T_VARCHAR)
+					{
+						printf("|% 16s", row + pos);
+					}
+					else if (col_type == K_NULL)
+					{
+						printf("|% 16s", "NULL");
+					}
+				}
+			}
+
+			printf("|\n");
 		}
 		free(buffer);
 	}
