@@ -1391,28 +1391,10 @@ int sem_update(token_list *tok)
 				}
 
 				//free(counter);
-				t_list* col_cur = cur;
-				t_list *val_cur = col_cur->next->next;
-
-				int col_index = 0;
-				while (col_cur->tok_value != EOC)
-				{
-					if (col_cur->tok_value == S_EQUAL
-						|| col_cur->tok_value == INT_LITERAL
-						|| col_cur->tok_value == STRING_LITERAL
-						|| col_cur->tok_value == K_NULL)
-					{
-						col_cur = col_cur->next;
-						continue;
-					}
-					
-					col_cur = col_cur->next;//skip to next statement
-					val_cur = col_cur->next->next;
-				}
+				
 
 				cd_entry* columns = get_columns(tab_entry);
 				int record_size = get_record_size(columns, tab_entry->num_columns);
-				char *buffer = (char*)malloc(record_size * sizeof(char));
 
 				FILE* fp;
 				char *filename = (char*)malloc(sizeof(tab_entry->table_name) + 4);
@@ -1428,23 +1410,75 @@ int sem_update(token_list *tok)
 				int record_count = 0;
 				fread(&record_count, sizeof(int), 1, fp);
 
+				char *buffer = (char*)malloc(record_size * record_count * sizeof(char));
+				fread(buffer, record_size, record_count, fp);
+
 				int offset = sizeof(int);
 				for (int i = 0; i < record_count; i++)
 				{
-					fseek(fp, offset + sizeof(int), SEEK_SET);
-					fread(buffer, record_size, 1, fp);
-
 					// check if current record can be updated
-					if (is_where_satisfied(buffer, tab_entry, columns, where_cur) == false)
+					char *row = buffer + record_size * i;
+					if (is_where_satisfied(row, tab_entry, columns, where_cur) == false)
 					{
 						offset += record_size;
 						continue;
 					}
 
-					fseek(fp, offset + sizeof(int), SEEK_SET);
+					t_list* col_cur = cur;
+					t_list *val_cur = NULL;
 
-					offset += record_size;
+					int col_index = 0;
+					while (col_cur->tok_value != EOC)
+					{
+						if (col_cur->tok_value == K_WHERE)
+							break;
+
+						if (col_cur->tok_value == S_EQUAL
+							|| col_cur->tok_value == INT_LITERAL
+							|| col_cur->tok_value == STRING_LITERAL
+							|| col_cur->tok_value == K_NULL)
+						{
+							col_cur = col_cur->next;
+							continue;
+						}
+
+						val_cur = col_cur->next->next;
+
+						// update record
+						int pos = get_data_pos(tab_entry, columns, col_cur->tok_string);
+						int len = get_data_len(tab_entry, columns, col_cur->tok_string);
+						if (pos < 0)
+						{
+							printf("ERROR: Invalid statement, expected 'SET', got %s\n", cur->tok_string);
+							rc = INVALID_STATEMENT;
+							cur->tok_value = INVALID;
+							break;
+						}
+
+						memset(row + pos, 0, len);
+
+						if (val_cur->tok_value == INT_LITERAL)
+						{
+							int base = atoi(val_cur->tok_string);
+							memcpy(row + pos, &base, sizeof(int));
+						}
+						else if (val_cur->tok_value == STRING_LITERAL)
+						{
+							char *val = row + pos;
+							strcpy(row + pos, val_cur->tok_string);
+						}
+						else if (cur->tok_value == K_NULL)
+						{
+							
+						}
+
+						col_cur = col_cur->next;//skip to next statement
+						
+					}
 				}
+
+				fseek(fp, sizeof(int), SEEK_SET);
+				fwrite(buffer, record_size, record_count, fp);
 
 				fclose(fp);
 
@@ -1476,6 +1510,7 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 		return true;
 
 	t_list *cur = where;
+	bool flag = false;
 	while (cur->tok_value != EOC)
 	{
 		if (cur->tok_value != IDENT)
@@ -1500,12 +1535,38 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 		{
 			int val = 0;
 			memcpy(&val, buffer + pos, sizeof(int));
+
+			int base = atoi(cur->tok_string);
+
+			if (comparator == S_EQUAL && val == base)
+				flag = true;
+
+			if (comparator > S_GREATER && val > base)
+				flag = true;
+
+			if (comparator > S_LESS && val < base)
+				flag = true;
 		}
 		else if (val_cur->tok_value == STRING_LITERAL)
 		{
 			char *val = buffer + pos;
 
-			strcmp(val, val_cur->tok_string);
+			int ret = strcmp(val, val_cur->tok_string);
+			if (comparator == S_EQUAL && ret == 0)
+				flag = true;
+
+			if (comparator > S_GREATER && ret > 0)
+				flag = true;
+
+			if (comparator > S_LESS && ret < 0)
+				flag = true;
+		}
+		else if (cur->tok_value == K_NULL)
+		{
+			char *val = buffer + pos;
+
+			if (comparator == K_IS && strcmp(val, "") == 0)
+				flag = true;
 		}
 
 		
@@ -1513,27 +1574,31 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 		cur = cur->next;//skip to next statement
 		
 	}
+
+	return flag;
 }
 
 int get_data_pos(tpd_entry *tab_entry, cd_entry* columns, char *name)
 {
-	int pos = -1;
+	int pos = 0;
+	bool find = false;
 	for (int i = 0; i < tab_entry->num_columns; i++)
 	{
 		if (strcasecmp(columns[i].col_name, name) == 0)
 			break;
 
 		pos += (columns[i].col_len + 1);
+		find = true;
 	}
 
-	return pos;
+	return find ? pos : -1;	
 }
 
 int get_data_len(tpd_entry *tab_entry, cd_entry* columns, char *name)
 {
 	for (int i = 0; i < tab_entry->num_columns; i++)
 	{
-		if (strcasecmp(columns[i].col_name, name))
+		if (strcasecmp(columns[i].col_name, name) == 0)
 			return columns[i].col_len + 1;
 	}
 
