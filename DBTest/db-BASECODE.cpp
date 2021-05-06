@@ -386,6 +386,9 @@ int do_semantic(token_list *tok_list)
 			case LIST_SCHEMA:
 						rc = sem_list_schema(cur);
 						break;
+			case INSERT:
+				rc = sem_insert(cur);
+				break;
 
 			default:
 					; /* no action */
@@ -1117,4 +1120,202 @@ tpd_entry* get_tpd_from_list(char *tabname)
 	}
 
 	return tpd;
+}
+
+
+int sem_insert(token_list *t_list)
+{
+	int rc = 0;
+	token_list *cur;
+	cur = t_list;
+	int cur_id = 0;
+	tpd_entry* tab_entry;
+
+	if ((tab_entry = get_tpd_from_list(cur->tok_string)) == NULL)
+	{
+		rc = TABLE_NOT_EXIST;
+		cur->tok_value = INVALID;
+		printf("invalid statement-Ln891\n");
+	}
+	else
+	{
+		cur = cur->next;
+		if (cur->tok_value != K_VALUES)
+		{
+			rc = INVALID_STATEMENT;
+			cur->tok_value = INVALID;
+			printf("hewwo\n");
+		}
+		else
+		{
+			cur = cur->next;
+			
+			
+			if (cur->tok_value != S_LEFT_PAREN)
+			{
+				rc = INVALID_STATEMENT;
+				cur->tok_value = INVALID;
+				printf("invalid statement-Ln911\n");
+			}
+			else
+			{
+				cur = cur->next;
+
+				FILE* fp;
+				char *filename = (char*)malloc(sizeof(tab_entry->table_name) + 4);
+
+				strcpy(filename, tab_entry->table_name);
+				strcat(filename, ".tab");
+				if ((fp = fopen(filename, "r+")) == NULL)
+				{
+					printf("ERROR: unable to read table from file\n");
+					return FILE_OPEN_ERROR;
+				}
+
+				int record_count = 0;
+				fread(&record_count, sizeof(int), 1, fp);
+
+				fseek(fp, 0, SEEK_END);
+
+				cd_entry* columns = get_columns(tab_entry);
+
+				int record_size = get_record_size(columns, tab_entry->num_columns);
+				char *buffer = (char*)malloc(record_size * sizeof(char));
+			
+				int elements_written = 0;
+
+				while (!rc)
+				{
+					if (elements_written >= tab_entry->num_columns)
+					{
+						rc = COLUMN_NOT_EXIST;
+						break;
+					}
+					int column_len = columns[elements_written].col_len + 1;
+					memset(buffer, 0, column_len);
+
+					if (cur->tok_value == S_COMMA)
+					{
+						cur = cur->next;
+						continue;
+					}
+					else if (cur->tok_value == STRING_LITERAL)
+					{
+						if (strlen(cur->tok_string) == 0 || strlen(cur->tok_string) > column_len - 1)
+						{
+							rc = INVALID_COLUMN_LENGTH;
+							cur->tok_value = INVALID_STATEMENT;
+							printf("ERROR: invalid length for column: %s\n", columns[elements_written].col_name);
+							return rc;
+						}
+						else if (columns[elements_written].col_type == T_CHAR || columns[elements_written].col_type == T_VARCHAR)
+						{
+							strcpy(buffer, cur->tok_string);
+							fwrite(buffer, column_len, 1, fp);
+
+							cur = cur->next;
+							elements_written++;
+						}
+						else
+						{
+
+							printf("ERROR: invalid type in value: %s\n", cur->tok_string);
+							rc = INVALID_TYPE_NAME;
+							return rc;
+						}
+					}
+					else if (cur->tok_value == INT_LITERAL)
+					{
+						if (columns[elements_written].col_type != T_INT)
+						{
+							printf("ERROR: invalid type in value: %s\n", cur->tok_string);
+							rc = INVALID_TYPE_NAME;
+							return rc;
+						}
+						else
+						{
+							int value = atoi(cur->tok_string);							
+							memcpy(buffer, &value, sizeof(int));
+
+							fwrite(buffer, column_len, 1, fp);
+							cur = cur->next;
+							elements_written++;
+						}
+					}
+					else if (cur->tok_value == K_NULL)
+					{
+						if (columns[elements_written].not_null)
+						{
+							rc = NULL_INSERT;
+							cur->tok_value = INVALID_STATEMENT;
+						}
+						else
+						{
+							fwrite(buffer, column_len, 1, fp);
+
+							cur = cur->next;
+							elements_written++;
+						}
+					}
+					else if (cur->tok_value == S_RIGHT_PAREN)
+					{
+						rc = 0;
+						break;// we're done
+
+					}
+					else
+					{
+						rc = INVALID_STATEMENT;
+						cur->tok_value = INVALID;
+					}
+
+				}
+
+				fseek(fp, 0, SEEK_SET);
+				record_count++;
+				fwrite(&record_count, sizeof(int), 1, fp);
+
+				printf("copying buffer to record in memory.\n");
+				
+				free(filename);
+				free(columns);
+				free(buffer);
+				fflush(fp);
+				fclose(fp);
+			}
+		}
+	}
+	return rc;
+}
+
+cd_entry* get_columns(tpd_entry* tab_entry)
+{
+	FILE* fhandle;
+	if ((fhandle = fopen("dbfile.bin", "rb")) == NULL)
+	{
+		printf("unable to open file2\n");
+		return NULL;
+	}
+
+	cd_entry* columns = (cd_entry*)calloc(tab_entry->num_columns, sizeof(cd_entry));
+	fseek(fhandle, sizeof(tpd_list), SEEK_SET);
+	for (int i = 0; i < tab_entry->num_columns; i++)
+	{
+		fread((void*)&columns[i], sizeof(cd_entry), 1, fhandle);
+	}
+	fclose(fhandle);
+
+
+	return columns;
+}
+
+int get_record_size(cd_entry *columns, int count)
+{
+	int size = 0;
+	for (int i = 0; i < count; i++)
+	{
+		size += (columns[i].col_len + 1);
+	}
+
+	return size;
 }

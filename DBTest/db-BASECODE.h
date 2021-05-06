@@ -165,7 +165,8 @@ typedef enum error_return_codes
   /* Must add all the possible errors from I/U/D + SELECT here */
 	FILE_OPEN_ERROR = -299,			// -299
 	DBFILE_CORRUPTION,					// -298
-	MEMORY_ERROR							  // -297
+	MEMORY_ERROR,							  // -297
+	NULL_INSERT
 } return_codes;
 
 /* Set of function prototypes */
@@ -186,3 +187,8 @@ int initialize_tpd_list();
 int add_tpd_to_list(tpd_entry *tpd);
 int drop_tpd_from_list(char *tabname);
 tpd_entry* get_tpd_from_list(char *tabname);
+
+int sem_insert(token_list *t_list);
+cd_entry* get_columns(tpd_entry* tab_entry);
+int get_record_size(cd_entry *columns, int count);
+
