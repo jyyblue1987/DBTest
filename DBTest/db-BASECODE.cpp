@@ -872,7 +872,7 @@ int initialize_tpd_list()
 	{
 		/* There is a valid dbfile.bin file - get file size */
 //		_fstat(_fileno(fhandle), &file_stat);
-		fstat(fileno(fhandle), &file_stat);
+		fstat(_fileno(fhandle), &file_stat);
 		printf("dbfile.bin size = %d\n", file_stat.st_size);
 
 		g_tpd_list = (tpd_list*)calloc(1, file_stat.st_size);
