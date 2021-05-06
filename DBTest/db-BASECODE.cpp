@@ -1428,6 +1428,8 @@ int sem_update(token_list *tok)
 				char *buffer = (char*)malloc(record_size * record_count * sizeof(char));
 				fread(buffer, record_size, record_count, fp);
 
+				int update_count = 0;
+
 				for (int i = 0; i < record_count; i++)
 				{
 					// check if current record can be updated
@@ -1486,6 +1488,8 @@ int sem_update(token_list *tok)
 						col_cur = col_cur->next;//skip to next statement
 						
 					}
+
+					update_count++;
 				}
 
 				fseek(fp, sizeof(int), SEEK_SET);
@@ -1493,6 +1497,8 @@ int sem_update(token_list *tok)
 
 				fclose(fp);
 				free(buffer);
+
+				printf("%d rows updated", update_count);
 			}
 		}
 	}
@@ -1505,11 +1511,18 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 		return true;
 
 	t_list *cur = where;
-	bool flag = false;
+	bool flag[10];
+	int and_or = -1;
+
+	int where_count = 0;
+
 	while (cur->tok_value != EOC)
 	{
 		if (cur->tok_value != IDENT)
 		{
+			if (cur->tok_value == K_OR || cur->tok_value == K_AND)
+				and_or = cur->tok_value;
+
 			cur = cur->next;
 			continue;
 		}
@@ -1526,21 +1539,23 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 
 		int len = get_data_len(tab_entry, columns, cur->tok_string);
 
+		flag[where_count] = false;
+
 		if (val_cur->tok_value == INT_LITERAL)
 		{
 			int val = 0;
 			memcpy(&val, buffer + pos, sizeof(int));
 
-			int base = atoi(cur->tok_string);
+			int base = atoi(val_cur->tok_string);
 
 			if (comparator == S_EQUAL && val == base)
-				flag = true;
+				flag[where_count] = true;
 
-			if (comparator > S_GREATER && val > base)
-				flag = true;
+			if (comparator == S_GREATER && val > base)
+				flag[where_count] = true;
 
-			if (comparator > S_LESS && val < base)
-				flag = true;
+			if (comparator == S_LESS && val < base)
+				flag[where_count] = true;
 		}
 		else if (val_cur->tok_value == STRING_LITERAL)
 		{
@@ -1548,29 +1563,35 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 
 			int ret = strcmp(val, val_cur->tok_string);
 			if (comparator == S_EQUAL && ret == 0)
-				flag = true;
+				flag[where_count] = true;
 
-			if (comparator > S_GREATER && ret > 0)
-				flag = true;
+			if (comparator == S_GREATER && ret > 0)
+				flag[where_count] = true;
 
-			if (comparator > S_LESS && ret < 0)
-				flag = true;
+			if (comparator == S_LESS && ret < 0)
+				flag[where_count] = true;
 		}
 		else if (cur->tok_value == K_NULL)
 		{
 			char *val = buffer + pos;
 
 			if (comparator == K_IS && strcmp(val, "") == 0)
-				flag = true;
+				flag[where_count] = true;
 		}
 
-		
-
 		cur = cur->next;//skip to next statement
+
+		where_count++;
 		
 	}
 
-	return flag;
+	if (and_or < 0)
+		return flag[0];
+
+	if (and_or == K_OR)
+		return flag[0] || flag[1];
+
+	return flag[0] && flag[1];
 }
 
 int get_data_pos(tpd_entry *tab_entry, cd_entry* columns, char *name)
