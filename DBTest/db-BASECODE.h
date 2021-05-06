@@ -203,4 +203,8 @@ int get_column_index(tpd_entry *tab_entry, cd_entry* columns, char *name);
 void print_name_records(tpd_entry *tab_entry, cd_entry* columns, token_list *cur, bool projection);
 token_list* get_where_for_select(token_list *cur, int &rc);
 bool is_null(char *buf, int len);
+token_list* get_order_by(token_list *cur, int &rc);
+int get_ascending_flag(token_list *cur, int &rc);
+int orderRecords(char *buff, tpd_entry *tab_entry, cd_entry *columns, int flag, char *sort_name, int record_size, int record_count);
+
 

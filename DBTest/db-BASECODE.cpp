@@ -1634,6 +1634,8 @@ int get_column_index(tpd_entry *tab_entry, cd_entry* columns, char *name)
 
 	return -1;
 }
+
+
 int sem_select(token_list *tok)
 {
 	int rc = 0;
@@ -1684,6 +1686,8 @@ int sem_select(token_list *tok)
 		//loads file header
 		cd_entry* columns = get_columns(tab_entry);
 		token_list *where_cur = get_where_for_select(table_cur, rc);
+		token_list *order_by_cur = get_order_by(table_cur, rc);
+		int ascending_flag = get_ascending_flag(order_by_cur, rc);
 			
 		int record_size = get_record_size(columns, tab_entry->num_columns);
 
@@ -1707,6 +1711,8 @@ int sem_select(token_list *tok)
 		fclose(fp);
 
 		print_name_records(tab_entry, columns, cur, projection);
+
+		orderRecords(buffer, tab_entry, columns, ascending_flag, order_by_cur->tok_string, record_size, record_count);
 
 		for (int i = 0; i < record_count; i++)
 		{
@@ -1792,10 +1798,81 @@ int sem_select(token_list *tok)
 		free(buffer);
 	}
 
-	
-
 	return rc;
 
+}
+
+int orderRecords(char *buff, tpd_entry *tab_entry, cd_entry *columns, int flag, char *sort_name, int record_size, int record_count)
+{
+	if (flag == 0)
+		return 0;
+	int pos = get_data_pos(tab_entry, columns, sort_name);
+	if (pos < 0)
+		return INVALID_COLUMN_NAME;
+
+	int col_index = get_column_index(tab_entry, columns, sort_name);
+	int col_type = columns[col_index].col_type;
+	int len = get_data_len(tab_entry, columns, sort_name);
+
+	if (col_type == K_NULL)
+		return 0;
+
+	char* temp = (char*)malloc(record_size);
+	
+	if (col_type == T_INT)
+	{
+		for (int i = 0; i < record_count - 1; i++)
+		{
+			char *row1 = buff + i * record_size;
+			
+			int val1 = 0;
+			memcpy(&val1, row1 + pos, sizeof(int));
+			
+			for (int j = i + 1; j < record_count; j++)
+			{
+				char *row2 = buff + j * record_size;
+
+				int val2 = 0;
+				memcpy(&val2, row2 + pos, sizeof(int));
+
+				if (flag == 1 && val1 > val2 
+					|| flag == 2 && val1 < val2 )	// swap
+				{
+					memcpy(temp, row1, record_size);
+					memcpy(row1, row2, record_size);
+					memcpy(row2, temp, record_size);
+				}
+			}
+		}
+	}
+
+	if (col_type == T_CHAR || col_type == T_VARCHAR)
+	{
+		for (int i = 0; i < record_count - 1; i++)
+		{
+			char *row1 = buff + i * record_size;
+
+			char *buff1 = row1 + pos;
+			
+			for (int j = i + 1; j < record_count; j++)
+			{
+				char *row2 = buff + j * record_size;
+
+				char *buff2 = row2 + pos;
+
+				if (flag == 1 && strcmp(buff1, buff2) < 0 
+					|| flag == 2 && (buff1, buff2) > 0 )	// swap
+				{
+					memcpy(temp, row1, record_size);
+					memcpy(row1, row2, record_size);
+					memcpy(row2, temp, record_size);
+				}
+			}
+		}
+	}
+
+	free(temp);
+	
 }
 
 bool is_null(char *buf, int len)
@@ -1869,13 +1946,7 @@ token_list* get_where_for_select(token_list *cur, int &rc)
 	t_list* counter = cur;
 	bool where = false;
 	while ((counter->tok_value != EOC && counter->tok_value != K_WHERE) && !rc && cur != NULL)
-	{
-		if (counter->tok_value != IDENT && counter->tok_value != S_STAR )
-		{
-			rc = INVALID_STATEMENT;
-			printf("ERROR: expected identifier, got %s", counter->tok_string);
-			counter->tok_value = INVALID;
-		}		
+	{		
 		counter = counter->next;		
 	}
 
@@ -1884,6 +1955,61 @@ token_list* get_where_for_select(token_list *cur, int &rc)
 		where_cur = counter->next;
 
 	return where_cur;
+}
+
+token_list* get_order_by(token_list *cur, int &rc)
+{
+	t_list * order_by_cur = NULL;
+	t_list* counter = cur;
+	bool where = false;
+	while ((counter->tok_value != EOC && counter->tok_value != K_ORDER) && !rc && cur != NULL)
+	{		
+		counter = counter->next;
+	}
+
+	if (counter->tok_value == K_ORDER)
+	{
+		order_by_cur = counter->next;
+		if (order_by_cur->tok_value != K_BY)
+		{
+			rc = INVALID_COLUMN_NAME;
+			order_by_cur->tok_value = INVALID;
+			printf("INVALID ORDER BY: %s\n", order_by_cur->tok_string);
+
+			return NULL;
+		}
+
+		order_by_cur = order_by_cur->next;
+		if (order_by_cur->tok_value != IDENT)
+		{
+			rc = INVALID_COLUMN_NAME;
+			order_by_cur->tok_value = INVALID;
+			printf("INVALID ORDER BY: %s\n", order_by_cur->tok_string);
+
+			return NULL;
+		}
+	}
+
+	return order_by_cur;
+}
+
+int get_ascending_flag(token_list *cur, int &rc)
+{	
+	int ascending_flag = 0; // 0: not sort, 1: asc, 2: desc
+	if (cur == NULL)
+		return 0;
+
+	t_list* counter = cur;
+	bool where = false;
+	
+	while ((counter->tok_value != EOC) && !rc && cur != NULL)
+	{
+		if (counter->tok_value == K_DESC)
+			ascending_flag = 2;
+		counter = counter->next;
+	}
+
+	return ascending_flag;
 }
 
 int sem_delete(token_list *t_list)
