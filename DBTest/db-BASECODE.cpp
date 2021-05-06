@@ -1517,7 +1517,7 @@ bool is_where_satisfied(char *buffer, tpd_entry *tab_entry, cd_entry* columns, t
 
 	int where_count = 0;
 
-	while (cur->tok_value != EOC)
+	while (cur->tok_value != EOC && cur->tok_value != K_ORDER )
 	{
 		if (cur->tok_value != IDENT)
 		{
@@ -2000,6 +2000,7 @@ int get_ascending_flag(token_list *cur, int &rc)
 	if (cur == NULL)
 		return 0;
 
+	ascending_flag = 1;
 	t_list* counter = cur;
 	bool where = false;
 	
