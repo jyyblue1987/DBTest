@@ -1499,7 +1499,7 @@ int sem_update(token_list *tok)
 				fclose(fp);
 				free(buffer);
 
-				printf("%d rows updated", update_count);
+				printf("%d rows updated\n", update_count);
 			}
 		}
 	}
@@ -1872,7 +1872,8 @@ int orderRecords(char *buff, tpd_entry *tab_entry, cd_entry *columns, int flag, 
 	}
 
 	free(temp);
-	
+
+	return 0;	
 }
 
 bool is_null(char *buf, int len)
