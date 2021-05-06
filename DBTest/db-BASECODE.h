@@ -191,6 +191,7 @@ tpd_entry* get_tpd_from_list(char *tabname);
 int sem_insert(token_list *t_list);
 int sem_update(token_list *t_list);
 int sem_select(token_list *t_list);
+int sem_delete(token_list *t_list);
 
 token_list* get_where_for_update(token_list *cur, int &rc);
 cd_entry* get_columns(tpd_entry* tab_entry);

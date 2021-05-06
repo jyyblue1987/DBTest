@@ -396,6 +396,9 @@ int do_semantic(token_list *tok_list)
 			case SELECT:
 				rc = sem_select(cur);
 				break;
+			case DELETE:
+				rc = sem_delete(cur);
+				break;
 
 			default:
 					; /* no action */
@@ -1841,4 +1844,95 @@ token_list* get_where_for_select(token_list *cur, int &rc)
 		where_cur = counter->next;
 
 	return where_cur;
+}
+
+int sem_delete(token_list *t_list)
+{
+	token_list *cur = t_list;
+	tpd_entry *tab_entry;
+	cd_entry  *columns;
+	int rc = 0;
+	char** records;
+
+	if (cur->tok_value != K_FROM)
+	{
+		printf("ERROR: invalid statement: %s", cur->tok_string);
+		rc = INVALID_STATEMENT;
+		cur->tok_value = INVALID;
+	}
+	else
+	{
+		cur = cur->next;
+		if ((tab_entry = get_tpd_from_list(cur->tok_string)) == NULL)
+		{
+			//printf("hi1\n");
+			rc = TABLE_NOT_EXIST;
+			cur->tok_value = INVALID;
+			return rc;
+		}
+		else
+		{
+			cur = cur->next;
+			columns = get_columns(tab_entry);
+
+			token_list *where_cur = get_where_for_select(cur, rc);
+
+			int record_size = get_record_size(columns, tab_entry->num_columns);
+
+			FILE* fp;
+			char *filename = (char*)malloc(sizeof(tab_entry->table_name) + 4);
+
+			strcpy(filename, tab_entry->table_name);
+			strcat(filename, ".tab");
+			if ((fp = fopen(filename, "r+")) == NULL)
+			{
+				printf("ERROR: unable to read table from file\n");
+				return FILE_OPEN_ERROR;
+			}
+
+			int record_count = 0;
+			fread(&record_count, sizeof(int), 1, fp);
+
+			char *buffer = (char*)malloc(record_size * record_count * sizeof(char));
+			fread(buffer, record_size, record_count, fp);
+
+			fclose(fp);
+
+			int remain_count = 0;
+			for (int i = 0; i < record_count; i++)
+			{
+				// check if current record can be updated
+				char *row = buffer + record_size * i;
+				if (is_where_satisfied(row, tab_entry, columns, where_cur) == true)
+					continue;
+				
+				remain_count++;				
+			}
+
+			if ((fp = fopen(filename, "wb")) == NULL)
+			{
+				printf("ERROR: unable to write table from file\n");
+				return FILE_OPEN_ERROR;
+			}
+
+			fwrite(&remain_count, sizeof(int), 1, fp);
+
+			for (int i = 0; i < remain_count; i++)
+			{
+				// check if current record can be updated
+				char *row = buffer + record_size * i;
+				if (is_where_satisfied(row, tab_entry, columns, where_cur) == true)
+					continue;
+
+				fwrite(row, record_size, 1, fp);
+			}
+			fclose(fp);
+
+			free(buffer);
+
+			printf("%d rows deleted\n", record_count - remain_count);
+		}
+
+	}
+	return rc;
 }
