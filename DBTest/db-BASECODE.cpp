@@ -331,8 +331,41 @@ int do_semantic(token_list *tok_list)
 		cur_cmd = LIST_SCHEMA;
 		cur = cur->next->next;
 	}
+	else if ((cur->tok_value == K_INSERT) &&
+		(cur->next != NULL) && (cur->next->tok_value == K_INTO))
+	{
+		printf("INSERT INTO statement\n");
+		cur_cmd = INSERT;
+		cur = cur->next->next;
+
+	}
+	else if ((cur->tok_value == K_SELECT) &&
+		((cur->next != NULL) && (cur->next->tok_value == S_STAR) || (cur->next != NULL) && (cur->next->tok_value == IDENT)))
+	{
+		printf("SELECT statement\n");
+		cur_cmd = SELECT;
+		cur = cur->next;
+
+	}
+	else if ((cur->tok_value == K_DELETE) &&
+		(cur->next != NULL) && (cur->next->tok_value == K_FROM))
+	{
+		printf("DELETE FROM statement\n");
+		cur_cmd = DELETE;
+		cur = cur->next;
+
+	}
+
+	else if ((cur->tok_value == K_UPDATE) &&
+		(cur->next != NULL) && (cur->next->tok_value == IDENT))
+	{
+		printf("UPDATE statement\n");
+		cur_cmd = UPDATE;
+		cur = cur->next;
+
+	}
 	else
-  {
+	{
 		printf("Invalid statement\n");
 		rc = cur_cmd;
 	}
@@ -353,6 +386,7 @@ int do_semantic(token_list *tok_list)
 			case LIST_SCHEMA:
 						rc = sem_list_schema(cur);
 						break;
+
 			default:
 					; /* no action */
 		}
@@ -884,7 +918,7 @@ int initialize_tpd_list()
 		else
 		{
 			fread(g_tpd_list, file_stat.st_size, 1, fhandle);
-			fflush(fhandle);
+			//fflush(fhandle);
 			fclose(fhandle);
 
 			if (g_tpd_list->list_size != file_stat.st_size)
