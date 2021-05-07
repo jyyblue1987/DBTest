@@ -1861,7 +1861,7 @@ int orderRecords(char *buff, tpd_entry *tab_entry, cd_entry *columns, int flag, 
 				char *buff2 = row2 + pos;
 
 				if (flag == 1 && strcmp(buff1, buff2) < 0 
-					|| flag == 2 && (buff1, buff2) > 0 )	// swap
+					|| flag == 2 && strcmp(buff1, buff2) > 0 )	// swap
 				{
 					memcpy(temp, row1, record_size);
 					memcpy(row1, row2, record_size);
@@ -2085,7 +2085,7 @@ int sem_delete(token_list *t_list)
 
 			fwrite(&remain_count, sizeof(int), 1, fp);
 
-			for (int i = 0; i < remain_count; i++)
+			for (int i = 0; i < record_count; i++)
 			{
 				// check if current record can be updated
 				char *row = buffer + record_size * i;
