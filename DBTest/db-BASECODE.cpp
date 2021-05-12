@@ -366,12 +366,19 @@ int do_semantic(token_list *tok_list)
 	else if ((cur->tok_value == K_BACKUP) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_TO))
 	{
-		printf("BACK FROM statement\n");
+		printf("BACK TO statement\n");
 		cur_cmd = BACKUP;
 		cur = cur->next;
 
 	}
+	else if ((cur->tok_value == K_RESTORE) &&
+		(cur->next != NULL) && (cur->next->tok_value == K_FROM))
+	{
+		printf("RESTORE FROM statement\n");
+		cur_cmd = RESTORE;
+		cur = cur->next;
 
+	}
 	else
 	{
 		printf("Invalid statement\n");
@@ -409,6 +416,9 @@ int do_semantic(token_list *tok_list)
 				break;
 			case BACKUP:
 				rc = sem_backup(cur);
+				break;
+			case RESTORE:
+				rc = sem_restore(cur);
 				break;
 
 			default:
@@ -2144,11 +2154,8 @@ char* get_buffer(char *filename, int &size)
 int sem_backup(token_list *t_list)
 {
 	token_list *cur = t_list;
-	tpd_entry *tab_entry;
-	cd_entry  *columns;
 	int rc = 0;
-	char** records;
-
+	
 	if (cur->tok_value != K_TO)
 	{
 		printf("ERROR: invalid statement: %s", cur->tok_string);
@@ -2167,14 +2174,14 @@ int sem_backup(token_list *t_list)
 
 		FILE *fp = fopen(filename, "wb");
 
-		fwrite(buffer, size, 0, fp);
+		fwrite(buffer, size, 1, fp);
 		free(buffer);
 
-		tpd_entry *cur = &(g_tpd_list->tpd_start);
+		tpd_entry *tpd_start = &(g_tpd_list->tpd_start);
 		int num_tables = g_tpd_list->num_tables;
 		for (int i = 0; i < num_tables; i++)
 		{
-			strcpy(table_name, cur[i].table_name);
+			strcpy(table_name, tpd_start[i].table_name);
 			strcat(table_name, ".tab");
 
 			buffer = get_buffer(table_name, size);
@@ -2190,3 +2197,76 @@ int sem_backup(token_list *t_list)
 
 	return rc;
 }
+
+int sem_restore(token_list *t_list)
+{
+	token_list *cur = t_list;
+	int rc = 0;
+	
+	if (cur->tok_value != K_FROM)
+	{
+		printf("ERROR: invalid statement: %s", cur->tok_string);
+		rc = INVALID_STATEMENT;
+		cur->tok_value = INVALID;
+	}
+	else
+	{
+		cur = cur->next;
+
+		char table_name[100];
+		int size = 0;
+		
+		char *filename = cur->tok_string;
+		char *buffer = NULL;
+
+		FILE *fp = fopen(filename, "rb");
+		tpd_list *tpd = (tpd_list*) malloc(sizeof(tpd_list));
+
+		fread(tpd, sizeof(tpd_list), 1, fp);
+		int db_file_bin_size = tpd->list_size;
+		
+		free(tpd);
+
+		fseek(fp, 0, SEEK_SET);
+		tpd = (tpd_list*)calloc(db_file_bin_size, 1);
+		fread(tpd, db_file_bin_size, 1, fp);
+
+		FILE *fp1 = fopen("dbfile.bin", "wb");
+		fwrite(tpd, db_file_bin_size, 1, fp1);
+		fclose(fp1);
+
+		
+		tpd_entry *tpd_start = &(tpd->tpd_start);
+		int num_tables = g_tpd_list->num_tables;
+
+		for (int i = 0; i < num_tables; i++)
+		{
+			fread(&size, sizeof(int), 1, fp);
+
+			buffer = (char*)calloc(size, 1);
+			
+			strcpy(table_name, tpd_start[i].table_name);
+			strcat(table_name, ".tab");
+
+			fread(buffer, size, 1, fp);
+
+			fp1 = fopen(table_name, "wb");
+
+			fwrite(buffer, size, 1, fp1);
+
+			fclose(fp1);
+
+			free(buffer);
+		}
+
+		
+		fclose(fp);
+
+		free(tpd);
+
+		return rc;
+	}
+
+	return rc;
+}
+

@@ -200,6 +200,7 @@ int sem_update(token_list *t_list);
 int sem_select(token_list *t_list);
 int sem_delete(token_list *t_list);
 int sem_backup(token_list *t_list);
+int sem_restore(token_list *t_list);
 
 token_list* get_where_for_update(token_list *cur, int &rc);
 cd_entry* get_columns(tpd_entry* tab_entry);
