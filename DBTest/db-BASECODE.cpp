@@ -27,13 +27,13 @@ int main(int argc, char** argv)
 
 	rc = initialize_tpd_list();
 
-  if (rc)
-  {
+	if (rc)
+	{
 		printf("\nError in initialize_tpd_list().\nrc = %d\n", rc);
-  }
+	}
 	else
 	{
-    rc = get_token(argv[1], &tok_list);
+		rc = get_token(argv[1], &tok_list);
 
 		/* Test code */
 		tok_ptr = tok_list;
@@ -355,7 +355,6 @@ int do_semantic(token_list *tok_list)
 		cur = cur->next;
 
 	}
-
 	else if ((cur->tok_value == K_UPDATE) &&
 		(cur->next != NULL) && (cur->next->tok_value == IDENT))
 	{
@@ -364,6 +363,15 @@ int do_semantic(token_list *tok_list)
 		cur = cur->next;
 
 	}
+	else if ((cur->tok_value == K_BACKUP) &&
+		(cur->next != NULL) && (cur->next->tok_value == K_TO))
+	{
+		printf("BACK FROM statement\n");
+		cur_cmd = BACKUP;
+		cur = cur->next;
+
+	}
+
 	else
 	{
 		printf("Invalid statement\n");
@@ -398,6 +406,9 @@ int do_semantic(token_list *tok_list)
 				break;
 			case DELETE:
 				rc = sem_delete(cur);
+				break;
+			case BACKUP:
+				rc = sem_backup(cur);
 				break;
 
 			default:
@@ -900,7 +911,7 @@ int initialize_tpd_list()
 	int rc = 0;
 	FILE *fhandle = NULL;
 //	struct _stat file_stat;
-	struct stat file_stat;
+	
 
   /* Open for read */
   if((fhandle = fopen("dbfile.bin", "rbc")) == NULL)
@@ -930,11 +941,17 @@ int initialize_tpd_list()
 	else
 	{
 		/* There is a valid dbfile.bin file - get file size */
-//		_fstat(_fileno(fhandle), &file_stat);
-		fstat(_fileno(fhandle), &file_stat);
-		printf("dbfile.bin size = %d\n", file_stat.st_size);
+//		_fstat(_fileno(fhandle), &file_stat);		
+		
+		fseek(fhandle, 0L, SEEK_END);
+		int size = ftell(fhandle);
 
-		g_tpd_list = (tpd_list*)calloc(1, file_stat.st_size);
+		printf("dbfile.bin size = %d\n", size);
+
+		g_tpd_list = (tpd_list*)calloc(1, size);
+
+		fseek(fhandle, 0L, SEEK_SET);
+
 
 		if (!g_tpd_list)
 		{
@@ -942,11 +959,11 @@ int initialize_tpd_list()
 		}
 		else
 		{
-			fread(g_tpd_list, file_stat.st_size, 1, fhandle);
+			fread(g_tpd_list, size, 1, fhandle);
 			//fflush(fhandle);
 			fclose(fhandle);
 
-			if (g_tpd_list->list_size != file_stat.st_size)
+			if (g_tpd_list->list_size != size)
 			{
 				rc = DBFILE_CORRUPTION;
 			}
@@ -2102,5 +2119,74 @@ int sem_delete(token_list *t_list)
 		}
 
 	}
+	return rc;
+}
+
+char* get_buffer(char *filename, int &size)
+{
+	size = 0;
+	FILE *fp = fopen(filename, "r");
+	if (fp == NULL)
+		return NULL;
+
+	fseek(fp, 0L, SEEK_END);
+	size = ftell(fp);
+
+	char *buffer = (char *)malloc(size * sizeof(char));
+	fseek(fp, 0L, SEEK_SET);
+	fread(buffer, size, 1, fp);
+
+	fclose(fp);
+
+	return buffer;
+}
+
+int sem_backup(token_list *t_list)
+{
+	token_list *cur = t_list;
+	tpd_entry *tab_entry;
+	cd_entry  *columns;
+	int rc = 0;
+	char** records;
+
+	if (cur->tok_value != K_TO)
+	{
+		printf("ERROR: invalid statement: %s", cur->tok_string);
+		rc = INVALID_STATEMENT;
+		cur->tok_value = INVALID;
+	}
+	else
+	{
+		cur = cur->next;
+
+		char table_name[100];
+		int size = 0;
+		char *buffer = get_buffer("dbfile.bin", size);
+		
+		char *filename = cur->tok_string;
+
+		FILE *fp = fopen(filename, "wb");
+
+		fwrite(buffer, size, 0, fp);
+		free(buffer);
+
+		tpd_entry *cur = &(g_tpd_list->tpd_start);
+		int num_tables = g_tpd_list->num_tables;
+		for (int i = 0; i < num_tables; i++)
+		{
+			strcpy(table_name, cur[i].table_name);
+			strcat(table_name, ".tab");
+
+			buffer = get_buffer(table_name, size);
+			fwrite(&size, sizeof(int), 1, fp);
+			fwrite(buffer, size, sizeof(char), fp);
+			free(buffer);
+		}
+
+		fclose(fp);
+
+		return rc;
+	}
+
 	return rc;
 }
