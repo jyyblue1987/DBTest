@@ -332,8 +332,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("CREATE TABLE statement\n");
 		cur_cmd = CREATE_TABLE;
 		cur = cur->next->next;
-
-		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_DROP) &&
 					((cur->next != NULL) && (cur->next->tok_value == K_TABLE)))
@@ -400,8 +398,7 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("BACK TO statement\n");
 		cur_cmd = BACKUP;
 		cur = cur->next;
-
-		add_command_log(command);
+		
 	}
 	else if ((cur->tok_value == K_RESTORE) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_FROM))
@@ -422,22 +419,30 @@ int do_semantic(token_list *tok_list, char* command)
 		switch(cur_cmd)
 		{
 			case CREATE_TABLE:
-						rc = sem_create_table(cur);
-						break;
+				rc = sem_create_table(cur);
+				if (rc == 0)
+					add_command_log(command);
+				break;
 			case DROP_TABLE:
-						rc = sem_drop_table(cur);
-						break;
+				rc = sem_drop_table(cur);
+				if (rc == 0)
+					add_command_log(command);
+				break;
 			case LIST_TABLE:
-						rc = sem_list_tables();
-						break;
+				rc = sem_list_tables();				
+				break;
 			case LIST_SCHEMA:
-						rc = sem_list_schema(cur);
-						break;
+				rc = sem_list_schema(cur);
+				break;
 			case INSERT:
 				rc = sem_insert(cur);
+				if (rc == 0)
+					add_command_log(command);
 				break;
 			case UPDATE:
 				rc = sem_update(cur);
+				if (rc == 0)
+					add_command_log(command);
 				break;
 
 			case SELECT:
@@ -445,9 +450,18 @@ int do_semantic(token_list *tok_list, char* command)
 				break;
 			case DELETE:
 				rc = sem_delete(cur);
+				if (rc == 0)
+					add_command_log(command);
 				break;
 			case BACKUP:
 				rc = sem_backup(cur);
+				if (rc == 0)
+				{
+					char log[100];
+					strcpy(log, "BACKUP ");
+					strcat(log, cur->next->tok_string);
+					add_command_log(log);					
+				}
 				break;
 			case RESTORE:
 				rc = sem_restore(cur);
@@ -2203,6 +2217,14 @@ int sem_backup(token_list *t_list)
 		char *buffer = get_buffer("dbfile.bin", size);
 		
 		char *filename = cur->tok_string;
+
+		FILE *fp2 = fopen(filename, "rb");
+		if (fp2 != NULL)
+		{
+			rc = INVALID_STATEMENT;
+			fclose(fp2);
+			return rc;
+		}
 
 		FILE *fp = fopen(filename, "wb");
 
