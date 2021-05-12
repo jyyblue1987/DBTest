@@ -2252,6 +2252,44 @@ int sem_backup(token_list *t_list)
 	return rc;
 }
 
+void backup_log()
+{
+	FILE *fp1 = fopen("db.log", "r");
+	if (fp1 == NULL)
+		return;
+
+	FILE *fp = NULL;
+
+	int i = 1;
+	char backup_log[100];
+	while (true)
+	{
+		sprintf(backup_log, "db.log%d", i);
+
+		fp = fopen(backup_log, "r");
+		if (fp != NULL)
+		{
+			fclose(fp);
+			i++;
+			continue;
+		}
+		break;
+	}
+
+	fp = fopen(backup_log, "w");
+	
+	char ch;
+	ch = fgetc(fp1);
+	while (ch != EOF)
+	{
+		fputc(ch, fp);
+		ch = fgetc(fp1);
+	}
+
+	fclose(fp);
+	fclose(fp1);
+}
+
 int sem_restore(token_list *t_list)
 {
 	token_list *cur = t_list;
@@ -2317,6 +2355,22 @@ int sem_restore(token_list *t_list)
 		fclose(fp);
 
 		free(tpd);
+
+		// add rf entry
+		if (cur->next != NULL && cur->next->next != NULL &&	// without RF
+			strcmp(cur->next->tok_string, "WITHOUT") == 0 &&
+			strcmp(cur->next->next->tok_string, "RF") == 0
+			)
+		{
+			// prune log
+			// copy file
+			backup_log();
+		}
+		else
+		{
+
+		}
+
 
 		return rc;
 	}
