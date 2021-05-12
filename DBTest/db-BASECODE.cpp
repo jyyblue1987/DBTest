@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <ctime>
+#include <string>
 
 #if defined(_WIN32) || defined(_WIN64)
 #define strcasecmp _stricmp
@@ -2261,7 +2262,7 @@ char* backup_log()
 	FILE *fp = NULL;
 
 	int i = 1;
-	char backup_log[100];
+	char* backup_log = (char*) calloc(100, 1);
 	while (true)
 	{
 		sprintf(backup_log, "db.log%d", i);
@@ -2292,14 +2293,36 @@ char* backup_log()
 	return backup_log;
 }
 
-void prune_log(char *backup_log, char *image_name)
+void prune_log(char *backup_log, char *image_name, bool rf_flag )
 {
 	FILE *fp = fopen(backup_log, "r");
 	if (fp == NULL)
 		return;
 
+	FILE *fp1 = fopen("db.log", "w");
 
+	char line[200];
+	size_t len = 200;
+	size_t read;
 
+	char check_backup_line[100] = "BACKUP ";
+	sprintf(check_backup_line, "%s %s\n", "BACKUP", image_name);
+	
+	while (fgets(line, len, fp)) {
+		fprintf(fp1, "%s", line);
+		if (strcmp(line, check_backup_line) == 0)
+			break;
+	}
+
+	if (rf_flag)
+	{
+		fprintf(fp1, "%s\n", "RF_START");
+		while (fgets(line, len, fp)) {
+			fprintf(fp1, "%s", line);			
+		}
+	}
+	
+	fclose(fp1);
 	fclose(fp);
 }
 int sem_restore(token_list *t_list)
@@ -2368,6 +2391,8 @@ int sem_restore(token_list *t_list)
 
 		free(tpd);
 
+		char* backup = backup_log();
+
 		// add rf entry
 		if (cur->next != NULL && cur->next->next != NULL &&	// without RF
 			strcmp(cur->next->tok_string, "WITHOUT") == 0 &&
@@ -2376,15 +2401,15 @@ int sem_restore(token_list *t_list)
 		{
 			// prune log
 			// copy file
-			char* backup = backup_log();
 			if (backup != NULL)
 			{
-
+				prune_log(backup, filename, false);
+				free(backup);
 			}
 		}
 		else
 		{
-
+			prune_log(backup, filename, true);
 		}
 
 
