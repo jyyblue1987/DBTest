@@ -2252,11 +2252,11 @@ int sem_backup(token_list *t_list)
 	return rc;
 }
 
-void backup_log()
+char* backup_log()
 {
 	FILE *fp1 = fopen("db.log", "r");
 	if (fp1 == NULL)
-		return;
+		return NULL;
 
 	FILE *fp = NULL;
 
@@ -2288,8 +2288,20 @@ void backup_log()
 
 	fclose(fp);
 	fclose(fp1);
+
+	return backup_log;
 }
 
+void prune_log(char *backup_log, char *image_name)
+{
+	FILE *fp = fopen(backup_log, "r");
+	if (fp == NULL)
+		return;
+
+
+
+	fclose(fp);
+}
 int sem_restore(token_list *t_list)
 {
 	token_list *cur = t_list;
@@ -2364,7 +2376,11 @@ int sem_restore(token_list *t_list)
 		{
 			// prune log
 			// copy file
-			backup_log();
+			char* backup = backup_log();
+			if (backup != NULL)
+			{
+
+			}
 		}
 		else
 		{
