@@ -325,7 +325,6 @@ int do_semantic(token_list *tok_list, char* command)
 	bool unique = false;
   token_list *cur = tok_list;
 
-  add_command_log(command);
 
 	if ((cur->tok_value == K_CREATE) &&
 			((cur->next != NULL) && (cur->next->tok_value == K_TABLE)))
@@ -333,6 +332,8 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("CREATE TABLE statement\n");
 		cur_cmd = CREATE_TABLE;
 		cur = cur->next->next;
+
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_DROP) &&
 					((cur->next != NULL) && (cur->next->tok_value == K_TABLE)))
@@ -340,6 +341,8 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("DROP TABLE statement\n");
 		cur_cmd = DROP_TABLE;
 		cur = cur->next->next;
+
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_LIST) &&
 					((cur->next != NULL) && (cur->next->tok_value == K_TABLE)))
@@ -347,6 +350,8 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("LIST TABLE statement\n");
 		cur_cmd = LIST_TABLE;
 		cur = cur->next->next;
+
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_LIST) &&
 					((cur->next != NULL) && (cur->next->tok_value == K_SCHEMA)))
@@ -362,6 +367,7 @@ int do_semantic(token_list *tok_list, char* command)
 		cur_cmd = INSERT;
 		cur = cur->next->next;
 
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_SELECT) &&
 		((cur->next != NULL) && (cur->next->tok_value == S_STAR) || (cur->next != NULL) && (cur->next->tok_value == IDENT)))
@@ -369,7 +375,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("SELECT statement\n");
 		cur_cmd = SELECT;
 		cur = cur->next;
-
 	}
 	else if ((cur->tok_value == K_DELETE) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_FROM))
@@ -378,6 +383,7 @@ int do_semantic(token_list *tok_list, char* command)
 		cur_cmd = DELETE;
 		cur = cur->next;
 
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_UPDATE) &&
 		(cur->next != NULL) && (cur->next->tok_value == IDENT))
@@ -386,6 +392,7 @@ int do_semantic(token_list *tok_list, char* command)
 		cur_cmd = UPDATE;
 		cur = cur->next;
 
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_BACKUP) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_TO))
@@ -394,6 +401,7 @@ int do_semantic(token_list *tok_list, char* command)
 		cur_cmd = BACKUP;
 		cur = cur->next;
 
+		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_RESTORE) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_FROM))
