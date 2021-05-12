@@ -307,6 +307,8 @@ void add_command_log(char *command)
 
 	if (g_tpd_list->db_flags == ROLLFORWARD_PENDING)
 		return;
+	if (g_tpd_list->db_flags == NORMAL)
+		return;
 
 	std::time_t t = std::time(0);   // get time now
 	std::tm* now = std::localtime(&t);
@@ -358,8 +360,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("DROP TABLE statement\n");
 		cur_cmd = DROP_TABLE;
 		cur = cur->next->next;
-
-		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_LIST) &&
 					((cur->next != NULL) && (cur->next->tok_value == K_TABLE)))
@@ -367,8 +367,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("LIST TABLE statement\n");
 		cur_cmd = LIST_TABLE;
 		cur = cur->next->next;
-
-		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_LIST) &&
 					((cur->next != NULL) && (cur->next->tok_value == K_SCHEMA)))
@@ -383,8 +381,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("INSERT INTO statement\n");
 		cur_cmd = INSERT;
 		cur = cur->next->next;
-
-		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_SELECT) &&
 		((cur->next != NULL) && (cur->next->tok_value == S_STAR) || (cur->next != NULL) && (cur->next->tok_value == IDENT)))
@@ -408,8 +404,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("UPDATE statement\n");
 		cur_cmd = UPDATE;
 		cur = cur->next;
-
-		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_BACKUP) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_TO))
@@ -1296,8 +1290,7 @@ int sem_insert(token_list *t_list)
 				while (!rc)
 				{
 					if (elements_written >= tab_entry->num_columns)
-					{
-						rc = COLUMN_NOT_EXIST;
+					{						
 						break;
 					}
 					int column_len = columns[elements_written].col_len + 1;
@@ -1388,7 +1381,7 @@ int sem_insert(token_list *t_list)
 				printf("copying buffer to record in memory.\n");
 				
 				free(filename);
-				free(columns);
+				//free(columns);
 				free(buffer);
 				fflush(fp);
 				fclose(fp);
@@ -1400,23 +1393,32 @@ int sem_insert(token_list *t_list)
 
 cd_entry* get_columns(tpd_entry* tab_entry)
 {
-	FILE* fhandle;
-	if ((fhandle = fopen("dbfile.bin", "rb")) == NULL)
-	{
-		printf("unable to open file2\n");
-		return NULL;
-	}
+	char *pos = (char *)tab_entry;
+	pos += sizeof(tpd_entry);
+	cd_entry *entry = (cd_entry *)pos;
 
-	cd_entry* columns = (cd_entry*)calloc(tab_entry->num_columns, sizeof(cd_entry));
-	fseek(fhandle, sizeof(tpd_list), SEEK_SET);
-	for (int i = 0; i < tab_entry->num_columns; i++)
-	{
-		fread((void*)&columns[i], sizeof(cd_entry), 1, fhandle);
-	}
-	fclose(fhandle);
+	return entry;
+
+	//FILE* fhandle;
+	//if ((fhandle = fopen("dbfile.bin", "rb")) == NULL)
+	//{
+	//	printf("unable to open file2\n");
+	//	return NULL;
+	//}
+
+	//cd_entry* columns = (cd_entry*)calloc(tab_entry->num_columns, sizeof(cd_entry));
+	//fseek(fhandle, sizeof(tpd_list), SEEK_SET);
 
 
-	return columns;
+
+	//for (int i = 0; i < tab_entry->num_columns; i++)
+	//{
+	//	fread((void*)&columns[i], sizeof(cd_entry), 1, fhandle);
+	//}
+	//fclose(fhandle);
+
+
+	//return columns;
 }
 
 int get_record_size(cd_entry *columns, int count)
@@ -2494,7 +2496,7 @@ int sem_rollforward(token_list *t_list)
 	else
 		to_flag = false;
 
-	FILE *fp = fopen("db.log", "w");
+	FILE *fp = fopen("db.log", "r");
 
 	char line[200];
 	size_t len = 200;
@@ -2515,11 +2517,10 @@ int sem_rollforward(token_list *t_list)
 	free(g_tpd_list);
 
 	
-	token_list *tok_list = NULL, *tok_ptr = NULL, *tmp_tok_ptr = NULL;
 
 	while (fgets(line, len, fp)) {
 		line[strlen(line) - 1] = NULL;
-		char* p = strchr(line, ' ');
+		char* p = strchr(line, '"');
 		char *command = p + 1;
 
 		command[strlen(command) - 1] = NULL;
@@ -2536,6 +2537,8 @@ int sem_rollforward(token_list *t_list)
 		}
 		else
 		{
+			token_list *tok_list = NULL, *tok_ptr = NULL, *tmp_tok_ptr = NULL;
+
 			rc = get_token(command, &tok_list);
 
 			/* Test code */
@@ -2596,6 +2599,8 @@ int sem_rollforward(token_list *t_list)
 	fseek(fp, 0, SEEK_SET);
 	fwrite(tpd, sizeof(tpd_list), 1, fp);
 	fclose(fp);
+
+	free(tpd);
 
 	return rc;
 
