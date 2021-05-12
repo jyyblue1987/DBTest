@@ -1269,7 +1269,7 @@ int sem_insert(token_list *t_list)
 
 				strcpy(filename, tab_entry->table_name);
 				strcat(filename, ".tab");
-				if ((fp = fopen(filename, "r+")) == NULL)
+				if ((fp = fopen(filename, "rb+")) == NULL)
 				{
 					printf("ERROR: unable to read table from file\n");
 					return FILE_OPEN_ERROR;
@@ -1279,6 +1279,8 @@ int sem_insert(token_list *t_list)
 				fread(&record_count, sizeof(int), 1, fp);
 
 				fseek(fp, 0, SEEK_END);
+
+				int size = ftell(fp);
 
 				cd_entry* columns = get_columns(tab_entry);
 
@@ -1293,6 +1295,7 @@ int sem_insert(token_list *t_list)
 					{						
 						break;
 					}
+					fseek(fp, 0, SEEK_END);
 					int column_len = columns[elements_written].col_len + 1;
 					memset(buffer, 0, column_len);
 
@@ -1311,7 +1314,7 @@ int sem_insert(token_list *t_list)
 							return rc;
 						}
 						else if (columns[elements_written].col_type == T_CHAR || columns[elements_written].col_type == T_VARCHAR)
-						{
+						{							
 							strcpy(buffer, cur->tok_string);
 							fwrite(buffer, column_len, 1, fp);
 
@@ -1339,7 +1342,7 @@ int sem_insert(token_list *t_list)
 							int value = atoi(cur->tok_string);							
 							memcpy(buffer, &value, sizeof(int));
 
-							fwrite(buffer, column_len, 1, fp);
+							size = fwrite(buffer, column_len, 1, fp);
 							cur = cur->next;
 							elements_written++;
 						}
@@ -1518,7 +1521,7 @@ int sem_update(token_list *tok)
 
 				strcpy(filename, tab_entry->table_name);
 				strcat(filename, ".tab");
-				if ((fp = fopen(filename, "r+")) == NULL)
+				if ((fp = fopen(filename, "rb+")) == NULL)
 				{
 					printf("ERROR: unable to read table from file\n");
 					return FILE_OPEN_ERROR;
@@ -1797,7 +1800,7 @@ int sem_select(token_list *tok)
 
 		strcpy(filename, tab_entry->table_name);
 		strcat(filename, ".tab");
-		if ((fp = fopen(filename, "r+")) == NULL)
+		if ((fp = fopen(filename, "rb+")) == NULL)
 		{
 			printf("ERROR: unable to read table from file\n");
 			return FILE_OPEN_ERROR;
@@ -2152,7 +2155,7 @@ int sem_delete(token_list *t_list)
 
 			strcpy(filename, tab_entry->table_name);
 			strcat(filename, ".tab");
-			if ((fp = fopen(filename, "r+")) == NULL)
+			if ((fp = fopen(filename, "rb+")) == NULL)
 			{
 				printf("ERROR: unable to read table from file\n");
 				return FILE_OPEN_ERROR;
@@ -2352,9 +2355,15 @@ void prune_log(char *backup_log, char *image_name, bool rf_flag )
 			fprintf(fp1, "%s", line);			
 		}
 	}
-	
+
 	fclose(fp1);
 	fclose(fp);
+
+	if (rf_flag)
+	{
+		printf("%s is deleted\n", backup_log);
+		remove(backup_log);
+	}
 }
 
 void prune_log1(char *backup_log,  bool to_flag, char *timelimit)
