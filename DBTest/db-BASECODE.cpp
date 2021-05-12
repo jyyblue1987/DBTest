@@ -307,8 +307,8 @@ void add_command_log(char *command)
 
 	if (g_tpd_list->db_flags == ROLLFORWARD_PENDING)
 		return;
-	if (g_tpd_list->db_flags == NORMAL)
-		return;
+	//if (g_tpd_list->db_flags == NORMAL)
+	//	return;
 
 	std::time_t t = std::time(0);   // get time now
 	std::tm* now = std::localtime(&t);
@@ -2258,17 +2258,20 @@ int sem_backup(token_list *t_list)
 		fwrite(buffer, size, 1, fp);
 		free(buffer);
 
-		tpd_entry *tpd_start = &(g_tpd_list->tpd_start);
+		char *pos = (char*)&(g_tpd_list->tpd_start);
 		int num_tables = g_tpd_list->num_tables;
 		for (int i = 0; i < num_tables; i++)
 		{
-			strcpy(table_name, tpd_start[i].table_name);
+			tpd_entry *tpd_start = (tpd_entry*)pos;
+			strcpy(table_name, tpd_start->table_name);
 			strcat(table_name, ".tab");
 
 			buffer = get_buffer(table_name, size);
 			fwrite(&size, sizeof(int), 1, fp);
 			fwrite(buffer, size, sizeof(char), fp);
 			free(buffer);
+
+			pos += tpd_start->tpd_size;
 		}
 
 		fclose(fp);
@@ -2438,16 +2441,19 @@ int sem_restore(token_list *t_list)
 		fclose(fp1);
 
 		
-		tpd_entry *tpd_start = &(tpd->tpd_start);
+		char *pos = (char*)&(g_tpd_list->tpd_start);
+
 		int num_tables = g_tpd_list->num_tables;
 
 		for (int i = 0; i < num_tables; i++)
 		{
+			tpd_entry *tpd_start = (tpd_entry*)pos;
+
 			fread(&size, sizeof(int), 1, fp);
 
 			buffer = (char*)calloc(size, 1);
 			
-			strcpy(table_name, tpd_start[i].table_name);
+			strcpy(table_name, tpd_start->table_name);
 			strcat(table_name, ".tab");
 
 			fread(buffer, size, 1, fp);
@@ -2459,6 +2465,8 @@ int sem_restore(token_list *t_list)
 			fclose(fp1);
 
 			free(buffer);
+
+			pos += tpd_start->tpd_size;
 		}
 
 		
