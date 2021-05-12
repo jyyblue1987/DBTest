@@ -2346,6 +2346,9 @@ void prune_log(char *backup_log, char *image_name, bool rf_flag )
 	{
 		fprintf(fp1, "%s\n", "RF_START");
 		while (fgets(line, len, fp)) {
+			if (strcmp(line, "RF_START\n") == 0)
+				continue;
+
 			fprintf(fp1, "%s", line);			
 		}
 	}
