@@ -305,6 +305,9 @@ void add_command_log(char *command)
 	if (fp == NULL)
 		return;
 
+	if (g_tpd_list->db_flags == ROLLFORWARD_PENDING)
+		return;
+
 	std::time_t t = std::time(0);   // get time now
 	std::tm* now = std::localtime(&t);
 
@@ -317,6 +320,21 @@ void add_command_log(char *command)
 			now->tm_min,
 			now->tm_sec,			
 		command);
+	fclose(fp);
+}
+
+
+void add_ddl_command(char *command)
+{
+	FILE *fp = fopen("db.log", "a");
+	if (fp == NULL)
+		return;
+
+	std::time_t t = std::time(0);   // get time now
+	std::tm* now = std::localtime(&t);
+
+	fseek(fp, 0, SEEK_END);
+	fprintf(fp, "%s\n", command);
 	fclose(fp);
 }
 
@@ -409,6 +427,12 @@ int do_semantic(token_list *tok_list, char* command)
 		cur = cur->next;
 
 	}
+	else if (cur->tok_value == K_ROLLFORWARD)
+	{
+		printf("ROLLFORWARD statement\n");
+		cur_cmd = ROLLFORWARD;
+		cur = cur->next;
+	}
 	else
 	{
 		printf("Invalid statement\n");
@@ -458,16 +482,17 @@ int do_semantic(token_list *tok_list, char* command)
 				rc = sem_backup(cur);
 				if (rc == 0)
 				{
-					char log[100];
-					strcpy(log, "BACKUP ");
-					strcat(log, cur->next->tok_string);
-					add_command_log(log);					
+					char log[100] = "";
+					sprintf(log, "BACKUP %s", cur->next->tok_string);					
+					add_ddl_command(log);
 				}
 				break;
 			case RESTORE:
 				rc = sem_restore(cur);
 				break;
-
+			case ROLLFORWARD:
+				rc = sem_rollforward(cur);
+				break;
 			default:
 					; /* no action */
 		}
@@ -1285,7 +1310,7 @@ int sem_insert(token_list *t_list)
 					}
 					else if (cur->tok_value == STRING_LITERAL)
 					{
-						if (strlen(cur->tok_string) == 0 || strlen(cur->tok_string) > (column_len - 1))
+						if (strlen(cur->tok_string) == 0 || strlen(cur->tok_string) > (size_t)(column_len - 1))
 						{
 							rc = INVALID_COLUMN_LENGTH;
 							cur->tok_value = INVALID_STATEMENT;
@@ -2094,7 +2119,6 @@ int sem_delete(token_list *t_list)
 	tpd_entry *tab_entry;
 	cd_entry  *columns;
 	int rc = 0;
-	char** records;
 
 	if (cur->tok_value != K_FROM)
 	{
@@ -2303,7 +2327,6 @@ void prune_log(char *backup_log, char *image_name, bool rf_flag )
 
 	char line[200];
 	size_t len = 200;
-	size_t read;
 
 	char check_backup_line[100] = "BACKUP ";
 	sprintf(check_backup_line, "%s %s\n", "BACKUP", image_name);
@@ -2325,6 +2348,42 @@ void prune_log(char *backup_log, char *image_name, bool rf_flag )
 	fclose(fp1);
 	fclose(fp);
 }
+
+void prune_log1(char *backup_log,  bool to_flag, char *timelimit)
+{
+	FILE *fp = fopen(backup_log, "r");
+	if (fp == NULL)
+		return;
+
+	FILE *fp1 = fopen("db.log", "w");
+
+	char line[200];
+	size_t len = 200;
+
+
+	while (fgets(line, len, fp)) {
+		if (strcmp(line, "RF_START\n") == 0)
+			break;
+		fprintf(fp1, "%s", line);		
+	}
+
+	if (to_flag)
+	{
+		char line1[200] = "";
+		while (fgets(line, len, fp)) {
+			strcpy(line1, line);
+			line1[14] = NULL;
+			if (strcmp(line1, timelimit) > 0)
+				break;
+
+			fprintf(fp1, "%s", line);
+		}
+	}
+
+	fclose(fp1);
+	fclose(fp);
+}
+
 int sem_restore(token_list *t_list)
 {
 	token_list *cur = t_list;
@@ -2415,5 +2474,130 @@ int sem_restore(token_list *t_list)
 	}
 
 	return rc;
+}
+
+int sem_rollforward(token_list *t_list)
+{
+	token_list *cur = t_list;
+	int rc = 0;
+
+	bool to_flag = true;
+	char timelimit[30];
+	sprintf(timelimit, "%s", "9999999999999");
+	if (cur->next != NULL && cur->next->next != NULL &&	// without RF
+		strcmp(cur->next->tok_string, "TO") == 0
+		)
+	{
+		to_flag = true;
+		sprintf(timelimit, "%s", cur->next->next->tok_string);
+	}
+	else
+		to_flag = false;
+
+	FILE *fp = fopen("db.log", "w");
+
+	char line[200];
+	size_t len = 200;
+
+	char rc_line[100] = "RF_START\n";
+	bool rf_start_flag = false;
+	while (fgets(line, len, fp)) {
+		if (strcmp(line, rc_line) == 0)
+		{
+			rf_start_flag = true;
+			break;
+		}
+	}
+
+	if (rf_start_flag == false)
+		return -1;
+
+	free(g_tpd_list);
+
+	
+	token_list *tok_list = NULL, *tok_ptr = NULL, *tmp_tok_ptr = NULL;
+
+	while (fgets(line, len, fp)) {
+		line[strlen(line) - 1] = NULL;
+		char* p = strchr(line, ' ');
+		char *command = p + 1;
+
+		command[strlen(command) - 1] = NULL;
+
+		line[14] = NULL;
+		if (strcmp(line, timelimit) > 0)
+			break;
+
+		rc = initialize_tpd_list();
+
+		if (rc)
+		{
+			printf("\nError in initialize_tpd_list().\nrc = %d\n", rc);
+		}
+		else
+		{
+			rc = get_token(command, &tok_list);
+
+			/* Test code */
+			tok_ptr = tok_list;
+			while (tok_ptr != NULL)
+			{
+				printf("%16s \t%d \t %d\n", tok_ptr->tok_string, tok_ptr->tok_class,
+					tok_ptr->tok_value);
+				tok_ptr = tok_ptr->next;
+			}
+
+			if (!rc)
+			{
+				rc = do_semantic(tok_list, command);
+			}
+
+			if (rc)
+			{
+				tok_ptr = tok_list;
+				while (tok_ptr != NULL)
+				{
+					if ((tok_ptr->tok_class == error) ||
+						(tok_ptr->tok_value == INVALID))
+					{
+						printf("\nError in the string: %s\n", tok_ptr->tok_string);
+						printf("rc=%d\n", rc);
+						break;
+					}
+					tok_ptr = tok_ptr->next;
+				}
+			}
+
+			/* Whether the token list is valid or not, we need to free the memory */
+			tok_ptr = tok_list;
+			while (tok_ptr != NULL)
+			{
+				tmp_tok_ptr = tok_ptr->next;
+				free(tok_ptr);
+				tok_ptr = tmp_tok_ptr;
+			}
+		}
+
+		free(g_tpd_list);
+	}
+
+	fclose(fp);
+
+	char *backup = backup_log();
+	prune_log1(backup, to_flag, timelimit);
+	free(backup);
+
+	// reset the db_flag = 0 
+	fp = fopen("dbfile.bin", "rb+");
+	tpd_list *tpd = (tpd_list*)calloc(1, sizeof(tpd_list));
+
+	fread(tpd, sizeof(tpd_list), 1, fp);
+	tpd->db_flags = NORMAL;
+	fseek(fp, 0, SEEK_SET);
+	fwrite(tpd, sizeof(tpd_list), 1, fp);
+	fclose(fp);
+
+	return rc;
+
 }
 

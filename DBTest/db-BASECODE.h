@@ -132,7 +132,7 @@ char *keyword_table[] =
   "int", "char", "varchar", "create", "table", "not", "null", "drop", "list", "schema",
   "for", "to", "insert", "into", "values", "delete", "from", "where", 
   "update", "set", "select", "order", "by", "desc", "is", "and", "or",
-  "sum", "avg", "count", "backup", "restore", "follforward"
+  "sum", "avg", "count", "backup", "restore", "rollforward"
 };
 
 /* This enum defines a set of possible statements */
@@ -178,8 +178,8 @@ typedef enum error_return_codes
 
 typedef enum db_operation
 {
-	NORMAL = 1,	// 1
-	ROLLFORWARD_PENDING		// 2	
+	NORMAL = 0,	// 0
+	ROLLFORWARD_PENDING		// 1
 
 } db_operation;
 
@@ -191,6 +191,7 @@ int sem_create_table(token_list *t_list);
 int sem_drop_table(token_list *t_list);
 int sem_list_tables();
 int sem_list_schema(token_list *t_list);
+int sem_rollforward(token_list *t_list);
 
 /*
 	Keep a global list of tpd - in real life, this will be stored
