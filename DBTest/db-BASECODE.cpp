@@ -2340,6 +2340,15 @@ int sem_restore(token_list *t_list)
 	{
 		cur = cur->next;
 
+		bool rf_flag = true;
+		if (cur->next != NULL && cur->next->next != NULL &&	// without RF
+			strcmp(cur->next->tok_string, "WITHOUT") == 0 &&
+			strcmp(cur->next->next->tok_string, "RF") == 0
+			)
+			rf_flag = false;
+		else
+			rf_flag = true;
+
 		char table_name[100];
 		int size = 0;
 		
@@ -2357,6 +2366,11 @@ int sem_restore(token_list *t_list)
 		fseek(fp, 0, SEEK_SET);
 		tpd = (tpd_list*)calloc(db_file_bin_size, 1);
 		fread(tpd, db_file_bin_size, 1, fp);
+
+		if (rf_flag)
+			tpd->db_flags = ROLLFORWARD_PENDING;
+		else
+			tpd->db_flags = NORMAL;
 
 		FILE *fp1 = fopen("dbfile.bin", "wb");
 		fwrite(tpd, db_file_bin_size, 1, fp1);
@@ -2392,26 +2406,10 @@ int sem_restore(token_list *t_list)
 		free(tpd);
 
 		char* backup = backup_log();
-
-		// add rf entry
-		if (cur->next != NULL && cur->next->next != NULL &&	// without RF
-			strcmp(cur->next->tok_string, "WITHOUT") == 0 &&
-			strcmp(cur->next->next->tok_string, "RF") == 0
-			)
-		{
-			// prune log
-			// copy file
-			if (backup != NULL)
-			{
-				prune_log(backup, filename, false);
-				free(backup);
-			}
-		}
-		else
-		{
-			prune_log(backup, filename, true);
-		}
-
+		if (backup != NULL)
+			prune_log(backup, filename, rf_flag);
+		
+		free(backup);
 
 		return rc;
 	}

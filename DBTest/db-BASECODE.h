@@ -176,6 +176,13 @@ typedef enum error_return_codes
 	NULL_INSERT
 } return_codes;
 
+typedef enum db_operation
+{
+	NORMAL = 1,	// 1
+	ROLLFORWARD_PENDING		// 2	
+
+} db_operation;
+
 /* Set of function prototypes */
 int get_token(char *command, token_list **tok_list);
 void add_to_list(token_list **tok_list, char *tmp, int t_class, int t_value);
