@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <ctime>
 
 #if defined(_WIN32) || defined(_WIN64)
 #define strcasecmp _stricmp
@@ -46,7 +47,7 @@ int main(int argc, char** argv)
     
 		if (!rc)
 		{
-			rc = do_semantic(tok_list);
+			rc = do_semantic(tok_list, argv[1]);
 		}
 
 		if (rc)
@@ -297,11 +298,34 @@ void add_to_list(token_list **tok_list, char *tmp, int t_class, int t_value)
 	return;
 }
 
-int do_semantic(token_list *tok_list)
+void add_command_log(char *command)
+{
+	FILE *fp = fopen("db.log", "a");
+	if (fp == NULL)
+		return;
+
+	std::time_t t = std::time(0);   // get time now
+	std::tm* now = std::localtime(&t);
+
+	fseek(fp, 0, SEEK_END);
+	fprintf(fp, "%04d%02d%02d%02d%02d%02d \"%s\"\n", 
+			now->tm_year + 1900,
+			now->tm_mon + 1,
+			now->tm_mday,
+			now->tm_hour,
+			now->tm_min,
+			now->tm_sec,			
+		command);
+	fclose(fp);
+}
+
+int do_semantic(token_list *tok_list, char* command)
 {
 	int rc = 0, cur_cmd = INVALID_STATEMENT;
 	bool unique = false;
   token_list *cur = tok_list;
+
+  add_command_log(command);
 
 	if ((cur->tok_value == K_CREATE) &&
 			((cur->next != NULL) && (cur->next->tok_value == K_TABLE)))

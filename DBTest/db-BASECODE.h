@@ -179,7 +179,7 @@ typedef enum error_return_codes
 /* Set of function prototypes */
 int get_token(char *command, token_list **tok_list);
 void add_to_list(token_list **tok_list, char *tmp, int t_class, int t_value);
-int do_semantic(token_list *tok_list);
+int do_semantic(token_list *tok_list, char* command);
 int sem_create_table(token_list *t_list);
 int sem_drop_table(token_list *t_list);
 int sem_list_tables();
