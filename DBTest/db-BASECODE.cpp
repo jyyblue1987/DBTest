@@ -2389,21 +2389,25 @@ void prune_log1(char *backup_log,  bool to_flag, char *timelimit)
 		fprintf(fp1, "%s", line);		
 	}
 
-	if (to_flag)
-	{
-		char line1[200] = "";
-		while (fgets(line, len, fp)) {
-			strcpy(line1, line);
-			line1[14] = NULL;
-			if (strcmp(line1, timelimit) > 0)
-				break;
 
-			fprintf(fp1, "%s", line);
-		}
+	char line1[200] = "";
+	while (fgets(line, len, fp)) {
+		strcpy(line1, line);
+		line1[14] = NULL;
+		if (strcmp(line1, timelimit) > 0)
+			break;
+
+		fprintf(fp1, "%s", line);
 	}
 
 	fclose(fp1);
 	fclose(fp);
+
+	if( to_flag == false )		
+	{
+		printf("%s is deleted\n", backup_log);
+		remove(backup_log);
+	}
 }
 
 int sem_restore(token_list *t_list)
