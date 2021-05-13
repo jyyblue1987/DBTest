@@ -408,6 +408,8 @@ int do_semantic(token_list *tok_list, char* command)
 	else if ((cur->tok_value == K_BACKUP) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_TO))
 	{
+		if (g_tpd_list->db_flags == ROLLFORWARD_PENDING)
+			return 0;
 		printf("BACK TO statement\n");
 		cur_cmd = BACKUP;
 		cur = cur->next;
@@ -416,6 +418,9 @@ int do_semantic(token_list *tok_list, char* command)
 	else if ((cur->tok_value == K_RESTORE) &&
 		(cur->next != NULL) && (cur->next->tok_value == K_FROM))
 	{
+		if (g_tpd_list->db_flags == ROLLFORWARD_PENDING)
+			return 0;
+
 		printf("RESTORE FROM statement\n");
 		cur_cmd = RESTORE;
 		cur = cur->next;
@@ -2506,12 +2511,12 @@ int sem_rollforward(token_list *t_list)
 	bool to_flag = true;
 	char timelimit[30];
 	sprintf(timelimit, "%s", "9999999999999");
-	if (cur->next != NULL && cur->next->next != NULL &&	// without RF
-		strcmp(cur->next->tok_string, "TO") == 0
+	if (cur != NULL && cur->next != NULL &&	// without RF
+		strcmp(cur->tok_string, "to") == 0
 		)
 	{
 		to_flag = true;
-		sprintf(timelimit, "%s", cur->next->next->tok_string);
+		sprintf(timelimit, "%s", cur->next->tok_string);
 	}
 	else
 		to_flag = false;
