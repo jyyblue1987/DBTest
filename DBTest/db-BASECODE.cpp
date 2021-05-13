@@ -2256,6 +2256,8 @@ int sem_backup(token_list *t_list)
 		FILE *fp2 = fopen(filename, "rb");
 		if (fp2 != NULL)
 		{
+			printf("Error - duplicate backup image name.: %s\n", filename);
+
 			rc = INVALID_STATEMENT;
 			fclose(fp2);
 			return rc;
@@ -2437,6 +2439,13 @@ int sem_restore(token_list *t_list)
 		char *buffer = NULL;
 
 		FILE *fp = fopen(filename, "rb");
+		if (fp == NULL)
+		{
+			printf("Error - transaction log does not contain the backup image name specified. %s\n", filename);
+			rc = INVALID_STATEMENT;
+			return rc;
+		}
+
 		tpd_list *tpd = (tpd_list*) malloc(sizeof(tpd_list));
 
 		fread(tpd, sizeof(tpd_list), 1, fp);
@@ -2517,6 +2526,12 @@ int sem_rollforward(token_list *t_list)
 	{
 		to_flag = true;
 		sprintf(timelimit, "%s", cur->next->tok_string);
+		if (strlen(timelimit) != 14)
+		{
+			printf("Error - invalid timestamp value. %s\n", timelimit);
+			rc = INVALID_STATEMENT;
+			return rc;
+		}
 	}
 	else
 		to_flag = false;
@@ -2536,8 +2551,12 @@ int sem_rollforward(token_list *t_list)
 		}
 	}
 
-	if (rf_start_flag == false)
-		return -1;
+	if (rf_start_flag == false || g_tpd_list->db_flags != ROLLFORWARD_PENDING )
+	{
+		printf("Error - database is not in ROLLFORWARD_PENDING state.\n");
+		rc = INVALID_STATEMENT;
+		return rc;
+	}
 
 	free(g_tpd_list);
 
