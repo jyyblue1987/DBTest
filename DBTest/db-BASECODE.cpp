@@ -395,8 +395,6 @@ int do_semantic(token_list *tok_list, char* command)
 		printf("DELETE FROM statement\n");
 		cur_cmd = DELETE;
 		cur = cur->next;
-
-		add_command_log(command);
 	}
 	else if ((cur->tok_value == K_UPDATE) &&
 		(cur->next != NULL) && (cur->next->tok_value == IDENT))
